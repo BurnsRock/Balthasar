@@ -48,10 +48,23 @@ describe('deck and turns', () => {
     expect(canPlay(state)).toBe(false);
     expect(canPlay({ ...state, perks: { ...state.perks, shortHanded: true } })).toBe(true);
   });
-  it('only allows a single scoring play in each combat turn', () => {
+  it('resolves one five-card hand, then the enemy acts and retained cards refill', () => {
     const base = newGame();
-    const state = { ...base, scene: 'combat' as const, selected: ['a','b','c','d','e'] };
-    expect(canPlay(state)).toBe(true);
-    expect(gameReducer(state, {type:'PLAY'}).scene).toBe('combat');
+    const cards = [c(8, 'spades'), c(8, 'clubs'), c(3, 'hearts'), c(6, 'diamonds'), c(9, 'spades')];
+    const retained = [c(4, 'spades'), c(5, 'clubs'), c(7, 'hearts')];
+    const state = {
+      ...base, scene: 'combat' as const, hand: [...cards, ...retained],
+      selected: cards.map((card) => card.id), enemy: createEnemy('boss', 1),
+      drawPile: startingDeck().slice(0, 8),
+    };
+    const after = gameReducer(state, { type: 'PLAY' });
+    expect(after.scene).toBe('combat');
+    expect(after.turn).toBe(2);
+    expect(after.enemy?.turn).toBe(1);
+    expect(after.hand).toHaveLength(8);
+    expect(after.hand).toEqual(expect.arrayContaining(retained));
+    expect(after.discardPile).toHaveLength(5);
+    expect(after.hp).toBe(65);
+    expect(after.selected).toHaveLength(0);
   });
 });
