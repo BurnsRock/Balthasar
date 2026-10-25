@@ -125,8 +125,8 @@ function Board({ state, dispatch }: { state: GameState; dispatch: React.Dispatch
                 </div>
                 <p className="landing-preview">{towerBoss
                   ? 'Next: The Tower Keeper'
-                  : 'Next: ' + ROOM_INFO[crossing ? state.spaces[landing!] : state.spaces[landing!]].name +
-                    (crossing ? ' · floor ' + (state.floor + 1) : '')}</p>
+                  : crossing ? 'Next: Unknown chamber · floor ' + (state.floor + 1) :
+                    'Next: ' + ROOM_INFO[state.spaces[landing!]].name}</p>
                 <button className="primary-button full" onClick={() => dispatch({ type: 'LAND' })}>LAND HERE ↗</button>
               </>
           }
