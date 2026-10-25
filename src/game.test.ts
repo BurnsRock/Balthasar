@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canPlay, drawToLimit, gameReducer, newGame, scoreHand, scorePowers, startingDeck, type Card } from './game';
+import { canPlay, createEnemy, drawToLimit, gameReducer, newGame, scoreHand, scorePowers, startingDeck, type Card } from './game';
 
 const c = (rank: number, suit: Card['suit'], id = suit + rank): Card => ({ id, rank, suit });
 
