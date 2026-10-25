@@ -53,7 +53,7 @@ describe('deck and turns', () => {
     const cards = [c(8, 'spades'), c(8, 'clubs'), c(3, 'hearts'), c(6, 'diamonds'), c(9, 'spades')];
     const retained = [c(4, 'spades'), c(5, 'clubs'), c(7, 'hearts')];
     const state = {
-      ...base, scene: 'combat' as const, hand: [...cards, ...retained],
+      ...base, scene: 'combat' as const, turn: 1, hand: [...cards, ...retained],
       selected: cards.map((card) => card.id), enemy: createEnemy('boss', 1),
       drawPile: startingDeck().slice(0, 8),
     };
