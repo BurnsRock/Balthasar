@@ -301,7 +301,7 @@ function resolvePlay(state: GameState): GameState {
       notification: 'Victory! Claim one reward or continue upward.',
     };
   }
-  return applyEnemyTurn(afterPlay, enemy, powers.block, messages);
+  return applyEnemyTurn(afterPlay, enemy, powers.block, []);
 }
 export function canPlay(state: GameState): boolean {
   return state.scene === 'combat' &&
