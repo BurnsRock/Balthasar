@@ -55,7 +55,7 @@ h1 { font-size: clamp(30px, 4vw, 49px); margin: 6px 0 6px; letter-spacing: .01em
 .panel-topline { font-size: 10px; font-weight: 800; letter-spacing: .14em; color: var(--gold); display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-bottom: 15px; border-bottom: 1px solid #383948; }
 .panel-topline span:last-child { color: var(--muted); }
 .board-panel { display: flex; flex-direction: column; }
-.tower-board { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(5px, .8vw, 11px); width: 100%; max-width: 600px; margin: 24px auto 20px; aspect-ratio: 1 / 1; }
+.tower-board { position: relative; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: clamp(5px, .8vw, 11px); width: 100%; max-width: 600px; margin: 24px auto 20px; aspect-ratio: 1 / 1; }
 .tower-tile { display: flex; position: relative; flex-direction: column; justify-content: center; align-items: center; min-width: 0; border: 1px solid #504b55; border-radius: 9px; background: linear-gradient(145deg, #34303d, #252631); overflow: hidden; }
 .tile-number { position: absolute; top: 8px; left: 9px; font-size: 10px; color: #8d8d99; font-weight: 800; }
 .tile-icon { font-size: clamp(21px, 4vw, 37px); line-height: 1.15; color: var(--gold); text-shadow: 0 2px 12px #0005; }
@@ -248,4 +248,47 @@ h1 { font-size: clamp(30px, 4vw, 49px); margin: 6px 0 6px; letter-spacing: .01em
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* The 10×10 tower uses 36 perimeter landings; the center remains open. */
+.tower-board { max-width: 680px; gap: clamp(2px, .36vw, 5px); }
+.tower-tile { border-radius: 5px; }
+.tower-tile .tile-number { font-size: clamp(6px, .65vw, 9px); top: 2px; left: 3px; }
+.tower-tile .tile-icon { font-size: clamp(14px, 2.1vw, 25px); }
+.tower-tile .tile-name { display: none; }
+.tower-core { left: 15%; top: 15%; width: 70%; height: 70%; }
+.tower-core-symbol { font-size: clamp(48px, 8vw, 110px); }
+.tower-core strong { font-size: clamp(52px, 8vw, 96px); }
+.tower-core > span:not(.tower-core-symbol), .tower-core small { font-size: clamp(9px, 1.4vw, 13px); }
+.floor-switch { display: flex; gap: 8px; margin-top: 16px; }
+.floor-switch button { min-width: 0; flex: 1; padding: 11px 5px; border-radius: 7px; border: 1px solid #524e61; background: #252633; font-size: 10px; font-weight: 800; letter-spacing: .055em; color: #b8b3bf; }
+.floor-switch button.is-active { background: #493e34; border-color: var(--gold); color: var(--gold-light); }
+.floor-switch button:hover { border-color: var(--gold-light); }
+.shop-removal-panel { margin-top: 22px; }
+.shop-removal-panel h2 { margin: 18px 0 8px; font-size: 24px; }
+.shop-removal-panel > p { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
+.removal-grid { max-height: 258px; overflow-y: auto; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 7px; padding: 5px; border: 1px solid #434451; border-radius: 9px; background: #151723; }
+.removal-item { min-width: 0; border: 1px solid #7c7d84; background: #f0ede3; border-radius: 6px; height: 48px; font-size: 18px; font-weight: 800; font-family: Georgia, serif; box-shadow: 0 2px 5px #0708115c; }
+.removal-item.chosen { outline: 3px solid var(--gold-light); outline-offset: 0; background: #fff6d7; transform: translateY(-1px); }
+.removal-item:hover:not(:disabled) { border-color: var(--gold); background: #fffdf4; }
+.removal-item.spades { color: #992f3d; }.removal-item.clubs { color: #324c7f; }
+.removal-item.hearts { color: #b74257; }.removal-item.diamonds { color: #a36d1d; }
+.removal-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; }
+.removal-controls > span { color: var(--muted); font-size: 12px; }
+.removal-message { margin-top: 18px; border-radius: 8px; border: 1px solid #766347; padding: 15px; color: var(--gold-light); font-size: 13px; }
+@media (max-width: 750px) {
+  .removal-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .tower-tile .tile-icon { font-size: clamp(15px, 3vw, 24px); }
+}
+@media (max-width: 520px) {
+  .tower-board { gap: 2px; }
+  .tower-tile .tile-icon { font-size: clamp(12px, 3.5vw, 18px); }
+  .tower-tile .tile-number { font-size: 6px; top: 1px; left: 2px; }
+  .tower-core { left: 14%; top: 14%; width: 72%; height: 72%; }
+  .tower-core-symbol { font-size: 45px; }
+  .tower-core strong { font-size: 54px; }
+  .floor-switch button { padding: 10px 3px; font-size: 9px; }
+  .removal-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  .removal-item { height: 43px; font-size: 16px; }
+  .removal-controls .primary-button { width: 100%; }
 }
