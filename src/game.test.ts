@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canPlay, createEnemy, drawToLimit, gameReducer, newGame, scoreHand, scorePowers, startingDeck, type Card } from './game';
+import { BOARD_SIZE, FLOOR_SPACES, MIN_DECK_SIZE, canPlay, cardRemovalCost, createEnemy, drawToLimit, gameReducer, generateFloor, newGame, scoreHand, scorePowers, startingDeck, tileIndex, type Card } from './game';
 
 const c = (rank: number, suit: Card['suit'], id = suit + rank): Card => ({ id, rank, suit });
 
@@ -125,7 +125,7 @@ describe('Coffers and floor transitions', () => {
     const nextSpaces = [...base.nextSpaces];
     nextSpaces[1] = 'cache';
     const result = gameReducer({
-      ...base, floor: 1, position: 11, rolled: 2, steps: 2, nextSpaces,
+      ...base, floor: 1, position: FLOOR_SPACES - 1, rolled: 2, steps: 2, nextSpaces,
     }, { type: 'LAND' });
     expect(result.floor).toBe(2);
     expect(result.position).toBe(1);
@@ -136,9 +136,101 @@ describe('Coffers and floor transitions', () => {
   it('shows the boss battle at the end of the final circuit', () => {
     const base = newGame();
     const result = gameReducer({
-      ...base, floor: 3, position: 11, rolled: 2, steps: 2,
+      ...base, floor: 3, position: FLOOR_SPACES - 1, rolled: 2, steps: 2,
     }, { type: 'LAND' });
     expect(result.scene).toBe('combat');
     expect(result.enemy?.kind).toBe('boss');
+  });
+});
+
+describe('10 by 10 tower floor', () => {
+  it('builds 100 grid cells with 36 unique perimeter spaces', () => {
+    expect(BOARD_SIZE).toBe(10);
+    expect(FLOOR_SPACES).toBe(36);
+    const cells = Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, i) =>
+      tileIndex(Math.floor(i / BOARD_SIZE), i % BOARD_SIZE));
+    const entries = cells.filter((index): index is number => index !== null);
+    expect(entries).toHaveLength(FLOOR_SPACES);
+    expect([...new Set(entries)].sort((a, b) => a - b)).toEqual(
+      Array.from({ length: FLOOR_SPACES }, (_, index) => index));
+    expect(tileIndex(9, 0)).toBe(0);
+    expect(tileIndex(9, 9)).toBe(9);
+    expect(tileIndex(0, 9)).toBe(18);
+    expect(tileIndex(0, 0)).toBe(27);
+    expect(tileIndex(5, 5)).toBeNull();
+  });
+  it('populates all 36 rooms and starts at an entry landing', () => {
+    const rooms = generateFloor();
+    expect(rooms).toHaveLength(FLOOR_SPACES);
+    expect(rooms[0]).toBe('entry');
+    expect(rooms.filter((room) => room === 'shop')).toHaveLength(3);
+    expect(rooms.filter((room) => room === 'cache')).toHaveLength(3);
+  });
+  it('keeps the next-floor layout stable before crossing', () => {
+    const base = newGame();
+    const upcoming = [...base.nextSpaces];
+    upcoming[0] = 'cache';
+    const result = gameReducer({ ...base, position: FLOOR_SPACES - 1,
+      rolled: 1, steps: 1, nextSpaces: upcoming }, { type: 'LAND' });
+    expect(result.floor).toBe(2);
+    expect(result.position).toBe(0);
+    expect(result.spaces).toEqual(upcoming);
+    expect(result.scene).toBe('reward');
+    expect(result.rewardSource).toBe('coffer');
+    expect(result.nextSpaces).toHaveLength(FLOOR_SPACES);
+  });
+  it('does not ascend prematurely at the old 12-space limit', () => {
+    const state = newGame();
+    const result = gameReducer({ ...state, position: 11,
+      rolled: 1, steps: 1 }, { type: 'LAND' });
+    expect(result.floor).toBe(1);
+    expect(result.position).toBe(12);
+  });
+});
+
+describe('shop card removal', () => {
+  const enterShop = (state = newGame()) => {
+    const spaces = [...state.spaces];
+    spaces[2] = 'shop';
+    return gameReducer({ ...state, scene: 'board', spaces, position: 0,
+      rolled: 2, steps: 2 }, { type: 'LAND' });
+  };
+  it('removes an exact card ID permanently and deducts gold once', () => {
+    const game = enterShop({ ...newGame(), gold: 100 });
+    expect(game.scene).toBe('shop');
+    const card = game.deck[0];
+    const price = cardRemovalCost(0);
+    const removed = gameReducer(game, { type: 'SHOP_REMOVE_CARD', cardId: card.id });
+    expect(removed.deck.some((entry) => entry.id === card.id)).toBe(false);
+    expect(removed.deck).toHaveLength(game.deck.length - 1);
+    expect(removed.gold).toBe(game.gold - price);
+    expect(removed.cardsRemoved).toBe(1);
+    expect(removed.shopRemoved).toBe(true);
+    expect(gameReducer(removed, { type: 'SHOP_REMOVE_CARD', cardId: game.deck[1].id })).toEqual(removed);
+    expect(gameReducer(removed, { type: 'LEAVE_SHOP' }).scene).toBe('board');
+  });
+  it('raises the next removal price and resets one-use limit in another shop', () => {
+    const game = enterShop({ ...newGame(), gold: 100 });
+    const removed = gameReducer(game, { type: 'SHOP_REMOVE_CARD', cardId: game.deck[0].id });
+    const next = enterShop(gameReducer(removed, { type: 'LEAVE_SHOP' }));
+    expect(next.shopRemoved).toBe(false);
+    expect(cardRemovalCost(next.cardsRemoved)).toBe(cardRemovalCost(0) + 10);
+    const result = gameReducer(next, { type: 'SHOP_REMOVE_CARD', cardId: next.deck[0].id });
+    expect(result.gold).toBe(next.gold - 25);
+    expect(result.cardsRemoved).toBe(2);
+  });
+  it('rejects insufficient gold, invalid IDs and out-of-shop removal', () => {
+    const game = enterShop(newGame());
+    const firstCard = game.deck[0];
+    expect(gameReducer(game, { type: 'SHOP_REMOVE_CARD', cardId: firstCard.id })).toEqual(game);
+    const rich = { ...game, gold: 100 };
+    expect(gameReducer(rich, { type: 'SHOP_REMOVE_CARD', cardId: 'no-such-card' })).toEqual(rich);
+    const board = { ...rich, scene: 'board' as const };
+    expect(gameReducer(board, { type: 'SHOP_REMOVE_CARD', cardId: firstCard.id })).toEqual(board);
+  });
+  it('never thins a deck below the minimum safe card count', () => {
+    const base = newGame();
+    const game = enterShop({ ...base, gold: 100, deck: base.deck.slice(0, MIN_DECK_SIZE) });
+    expect(gameReducer(game, { type: 'SHOP_REMOVE_CARD', cardId: game.deck[0].id })).toEqual(game);
   });
 });
