@@ -17,6 +17,40 @@ describe('poker scoring', () => {
     expect(scoreHand(cards)!.activeIds).toHaveLength(5);
     expect(scoreHand(cards)!.name).toBe('Full House');
   });
+  it('recognizes mixed-suit Five of a Kind created by deck edits', () => {
+    const cards = [
+      c(7, 'spades'), c(7, 'clubs'), c(7, 'hearts'),
+      c(7, 'diamonds'), c(7, 'spades', 'duplicate-7-spades'),
+    ];
+    const score = scoreHand(cards)!;
+    expect(score.name).toBe('Five of a Kind');
+    expect(score.activeIds).toHaveLength(5);
+    const powers = scorePowers(cards, score, newGame().perks);
+    expect(powers.attack).toBe(77);
+    expect(powers.block).toBe(38);
+    expect(powers.heal).toBe(22);
+    expect(powers.luck).toBe(16);
+  });
+  it('recognizes Flush House over regular Full House with edited suits', () => {
+    const cards = [
+      c(7, 'hearts', 'a'), c(7, 'hearts', 'b'), c(7, 'hearts', 'c'),
+      c(4, 'hearts', 'd'), c(4, 'hearts', 'e'),
+    ];
+    const score = scoreHand(cards)!;
+    expect(score.name).toBe('Flush House');
+    expect(score.activeIds).toHaveLength(5);
+    expect(score.multiplier).toBeGreaterThan(4);
+  });
+  it('recognizes Flush Five as the highest edited-deck combination', () => {
+    const cards = Array.from({ length: 5 }, (_, i) => c(7, 'spades', 'seven-' + i));
+    const score = scoreHand(cards)!;
+    expect(score.name).toBe('Flush Five');
+    expect(score.activeIds).toHaveLength(5);
+    expect(score.multiplier).toBeGreaterThan(scoreHand([
+      c(7, 'hearts', 'a'), c(7, 'hearts', 'b'), c(7, 'hearts', 'c'),
+      c(4, 'hearts', 'd'), c(4, 'hearts', 'e'),
+    ])!.multiplier);
+  });
   it('handles ace-low straights', () => {
     const cards = [c(14, 'spades'), c(2, 'clubs'), c(3, 'hearts'), c(4, 'clubs'), c(5, 'spades')];
     expect(scoreHand(cards)!.name).toBe('Straight');
@@ -66,5 +100,45 @@ describe('deck and turns', () => {
     expect(after.discardPile).toHaveLength(5);
     expect(after.hp).toBe(65);
     expect(after.selected).toHaveLength(0);
+  });
+});
+
+describe('Coffers and floor transitions', () => {
+  it('opens a free relic-selection screen instead of combat', () => {
+    const base = newGame();
+    const spaces = [...base.spaces];
+    spaces[2] = 'cache';
+    const result = gameReducer({ ...base, spaces, rolled: 2, steps: 2 }, { type: 'LAND' });
+    expect(result.scene).toBe('reward');
+    expect(result.rewardSource).toBe('coffer');
+    expect(result.rewards).toHaveLength(3);
+    expect(result.rewards.every((reward) => reward.id !== 'twins' && reward.id !== 'royals')).toBe(true);
+    expect(result.enemy).toBeNull();
+    expect(result.gold).toBe(base.gold);
+    const chosen = gameReducer(result, { type: 'CHOOSE_REWARD', id: result.rewards[0].id });
+    expect(chosen.scene).toBe('board');
+    expect(chosen.rewardSource).toBeNull();
+    expect(chosen.rewards).toHaveLength(0);
+  });
+  it('resolves the pre-generated next floor without rerolling its destination', () => {
+    const base = newGame();
+    const nextSpaces = [...base.nextSpaces];
+    nextSpaces[1] = 'cache';
+    const result = gameReducer({
+      ...base, floor: 1, position: 11, rolled: 2, steps: 2, nextSpaces,
+    }, { type: 'LAND' });
+    expect(result.floor).toBe(2);
+    expect(result.position).toBe(1);
+    expect(result.spaces).toEqual(nextSpaces);
+    expect(result.scene).toBe('reward');
+    expect(result.rewardSource).toBe('coffer');
+  });
+  it('shows the boss battle at the end of the final circuit', () => {
+    const base = newGame();
+    const result = gameReducer({
+      ...base, floor: 3, position: 11, rolled: 2, steps: 2,
+    }, { type: 'LAND' });
+    expect(result.scene).toBe('combat');
+    expect(result.enemy?.kind).toBe('boss');
   });
 });
