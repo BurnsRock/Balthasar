@@ -13,7 +13,7 @@ const ROOM_INFO: Record<Room, { icon: string; name: string; description: string 
   elite: { icon: '♜', name: 'Elite', description: 'A formidable defender' },
   shop: { icon: '¤', name: 'Merchant', description: 'Spend gold on a relic or cards' },
   rest: { icon: '✚', name: 'Sanctuary', description: 'Recover 14 HP' },
-  cache: { icon: '◆', name: 'Coffer', description: 'Collect 16 gold' },
+  cache: { icon: '◆', name: 'Coffer', description: 'Choose a relic' },
   fortune: { icon: '✦', name: 'Fortune', description: 'Gain 2 Luck' },
   forge: { icon: '⚒', name: 'Forge', description: 'Gain +1 Club block power' },
 };
@@ -72,8 +72,9 @@ function Title({ eyebrow, title, subtitle }: { eyebrow: string; title: string; s
 }
 function Board({ state, dispatch }: { state: GameState; dispatch: React.Dispatch<GameAction> }) {
   const landing = state.steps === null ? null : (state.position + state.steps) % 12;
-  const towerBoss = state.steps !== null && state.floor === 3 && state.position + state.steps >= 12;
   const crossing = state.steps !== null && state.position + state.steps >= 12;
+  const visibleLanding = crossing ? null : landing;
+  const towerBoss = state.steps !== null && state.floor === 3 && state.position + state.steps >= 12;
   return <section className="board-screen screen">
     <Title eyebrow={'THE ASCENT · FLOOR ' + state.floor} title="The Spiral Stair"
       subtitle="One circuit, one floor higher. Roll the die, choose where to land, and survive the tower." />
@@ -92,7 +93,7 @@ function Board({ state, dispatch }: { state: GameState; dispatch: React.Dispatch
             : <div key={index} className={
                 'tower-tile tile-' + state.spaces[index] +
                 (index === state.position ? ' tile-current' : '') +
-                (landing === index ? ' tile-landing' : '')
+                (visibleLanding === index ? ' tile-landing' : '')
               }>
                 <span className="tile-number">{String(index + 1).padStart(2, '0')}</span>
                 <span className="tile-icon" aria-hidden="true">{index === state.position ? '♟' : ROOM_INFO[state.spaces[index]].icon}</span>
@@ -125,7 +126,7 @@ function Board({ state, dispatch }: { state: GameState; dispatch: React.Dispatch
                 </div>
                 <p className="landing-preview">{towerBoss
                   ? 'Next: The Tower Keeper'
-                  : crossing ? 'Next: Unknown chamber · floor ' + (state.floor + 1) :
+                  : crossing ? 'Next: ' + ROOM_INFO[state.nextSpaces[landing!]].name + ' · floor ' + (state.floor + 1) :
                     'Next: ' + ROOM_INFO[state.spaces[landing!]].name}</p>
                 <button className="primary-button full" onClick={() => dispatch({ type: 'LAND' })}>LAND HERE ↗</button>
               </>
@@ -251,8 +252,11 @@ function RewardCard({ reward, onClick, disabled, cost, purchased = false }: {
 }
 function RewardScreen({ state, dispatch }: { state: GameState; dispatch: React.Dispatch<GameAction> }) {
   return <section className="screen small-screen">
-    <Title eyebrow="VICTORY · A CHOICE OF POWER" title="Claim Your Spoils"
-      subtitle={'The enemy falls. You earned ' + (state.enemy?.elite ? 22 : 12) + ' gold. Select one reward to shape your next fights.'} />
+    <Title eyebrow={state.rewardSource === 'coffer' ? 'A GIFT FROM THE TOWER' : 'VICTORY · A CHOICE OF POWER'}
+      title={state.rewardSource === 'coffer' ? 'The Relic Coffer' : 'Claim Your Spoils'}
+      subtitle={state.rewardSource === 'coffer'
+        ? 'Inside the coffer lie three relics. Choose one for free, or leave them untouched.'
+        : 'The enemy falls. You earned ' + (state.enemy?.elite ? 22 : 12) + ' gold. Select one reward to shape your next fights.'} />
     <div className="reward-grid">
       {state.rewards.map((reward) =>
         <RewardCard key={reward.id} reward={reward} onClick={() => dispatch({ type: 'CHOOSE_REWARD', id: reward.id })} />)}

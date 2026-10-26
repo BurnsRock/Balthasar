@@ -14,8 +14,9 @@
 - No automatic full-hand discard at turn end: cards you keep carry forward.
 - Enemy intention is public. Enemy acts **after** the single scoring play.
 - Luck is spent to move a die roll up or down by one space per point.
-- The twelve-room square circuit climbs one floor each lap. Finish floor 3 to face the tower boss.
-- Upgrades and extra cards can be earned after battles or bought in shops.
+- The twelve-room square circuit climbs one floor each lap. The upcoming floor is generated in advance, so cross-floor destination previews match actual landings. Finish floor 3 to face the tower boss.
+- Upgrades and extra cards can be earned after battles or bought in shops. **Coffers** grant a free choice of one of three relic upgrades, without initiating combat or granting gold.
+- Modified decks can form **Five of a Kind** (five matching ranks), **Flush House** (three-of-a-kind and a pair, all one suit), or **Flush Five** (five identical ranks and suits). These rank above Straight Flush; all five scoring cards activate.
 
 ## Intentionally provisional
 
@@ -42,5 +43,6 @@
 - Eight cards are held initially, and unplayed cards remain through subsequent draws.
 - Draw/discard piles recycle and permit longer fights.
 - Movement rolls, Luck adjustment, varied room landings and floor climbing work.
-- Rewards modify combat or add cards, and loss/restart/win states are reachable.
+- Rewards modify combat or add cards, Coffer landings offer a free relic choice, and loss/restart/win states are reachable.
+- Enhanced-deck hands (Five of a Kind / Flush House / Flush Five) trigger correctly, while floor-transition landings never silently reroll the preview.
 - Layout is usable on narrow phones and on foldable screens.
