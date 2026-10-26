@@ -26,6 +26,8 @@ export interface GameState {
   floor: number;
   position: number;
   spaces: Room[];
+  nextSpaces: Room[];
+  rewardSource: 'battle' | 'coffer' | null;
   hp: number;
   maxHp: number;
   gold: number;
@@ -94,7 +96,13 @@ export function scoreHand(cards: Card[]): Score | null {
   let multiplier = 1;
   let level = 0;
   let active: Card[] = [grouped[0][0]];
-  if (straight && flush) {
+  if (lengths[0] === 5 && flush) {
+    name = 'Flush Five'; multiplier = 7.5; level = 11; active = cards;
+  } else if (lengths[0] === 3 && lengths[1] === 2 && flush) {
+    name = 'Flush House'; multiplier = 6.5; level = 10; active = cards;
+  } else if (lengths[0] === 5) {
+    name = 'Five of a Kind'; multiplier = 5.5; level = 9; active = cards;
+  } else if (straight && flush) {
     name = 'Straight Flush'; multiplier = 4; level = 8; active = cards;
   } else if (lengths[0] === 4) {
     name = 'Four of a Kind'; multiplier = 3; level = 7; active = grouped[0];
@@ -161,6 +169,7 @@ function blankPerks(): Perks {
 export function newGame(): GameState {
   return {
     scene: 'board', floor: 1, position: 0, spaces: generateFloor(),
+    nextSpaces: generateFloor(), rewardSource: null,
     hp: 68, maxHp: 68, gold: 12, luck: 2,
     deck: startingDeck(), drawPile: [], discardPile: [], hand: [], selected: [],
     perks: blankPerks(), enemy: null, turn: 0, fightsWon: 0,
@@ -203,13 +212,19 @@ export function enemyIntent(enemy: Enemy, floor: number): Intent {
   const intent = pattern[enemy.kind][enemy.turn % pattern[enemy.kind].length];
   return { ...intent, value: intent.value + Math.max(0, floor - 1) * (intent.type === 'defend' ? 2 : 1) };
 }
-function rewardsForWin(state: GameState): Reward[] {
-  if (state.fightsWon === 0) return [REWARDS[5], REWARDS[0], REWARDS[6]];
-  const available = REWARDS.filter((reward) =>
+function availableRewards(state: GameState, relicsOnly = false): Reward[] {
+  return REWARDS.filter((reward) =>
+    (!relicsOnly || (reward.id !== 'twins' && reward.id !== 'royals')) &&
     (reward.id !== 'short' || !state.perks.shortHanded) &&
     (reward.id !== 'hand' || state.perks.handSize < 11),
   );
-  return shuffle(available).slice(0, 3);
+}
+function rewardsForWin(state: GameState): Reward[] {
+  if (state.fightsWon === 0) return [REWARDS[5], REWARDS[0], REWARDS[6]];
+  return shuffle(availableRewards(state)).slice(0, 3);
+}
+function rewardsForCoffer(state: GameState): Reward[] {
+  return shuffle(availableRewards(state, true)).slice(0, 3);
 }
 function grantReward(state: GameState, id: RewardId): GameState {
   const perks = { ...state.perks };
@@ -232,7 +247,7 @@ function beginBattle(state: GameState, kind: EnemyKind, elite = false): GameStat
   return {
     ...state, scene: 'combat', hand: cards.hand, drawPile: cards.drawPile,
     discardPile: cards.discardPile, enemy, selected: [], turn: 1,
-    log: ['The ' + enemy.name + ' blocks your ascent.'],
+    log: [enemy.name + ' blocks your ascent.'],
     notification: 'Choose five cards, then play your hand.',
   };
 }
@@ -242,7 +257,8 @@ function resolveRoom(state: GameState, room: Room): GameState {
     case 'elite': return beginBattle(state, 'warden', true);
     case 'shop': return { ...state, scene: 'shop', shopBought: [], notification: 'A merchant offers unusual bargains.' };
     case 'rest': return { ...state, hp: Math.min(state.maxHp, state.hp + 14), notification: 'You rest and recover 14 HP.' };
-    case 'cache': return { ...state, gold: state.gold + 16, notification: 'You find 16 gold in a forgotten coffer.' };
+    case 'cache': return { ...state, scene: 'reward', rewardSource: 'coffer',
+      rewards: rewardsForCoffer(state), notification: 'The Coffer holds a choice of relics. Select one.' };
     case 'fortune': return { ...state, luck: state.luck + 2, notification: 'A fortunate omen grants 2 Luck.' };
     case 'forge': return { ...state, perks: { ...state.perks, clubs: state.perks.clubs + 1 }, notification: 'The forge reinforces your Clubs (+1 block).' };
     default: return { ...state, notification: 'You find a quiet stairwell.' };
@@ -297,7 +313,7 @@ function resolvePlay(state: GameState): GameState {
     }
     const won = { ...afterPlay, gold: afterPlay.gold + (enemy.elite ? 22 : 12), fightsWon: state.fightsWon + 1 };
     return {
-      ...won, scene: 'reward', rewards: rewardsForWin(state),
+      ...won, scene: 'reward', rewardSource: 'battle', rewards: rewardsForWin(state),
       notification: 'Victory! Claim one reward or continue upward.',
     };
   }
@@ -334,9 +350,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
       const floor = state.floor + (wrapped ? 1 : 0);
       const position = sum % 12;
-      const spaces = wrapped ? generateFloor() : state.spaces;
+      const spaces = wrapped ? state.nextSpaces : state.spaces;
+      const nextSpaces = wrapped ? generateFloor() : state.nextSpaces;
       return resolveRoom({
-        ...state, floor, position, spaces, rolled: null, steps: null,
+        ...state, floor, position, spaces, nextSpaces, rolled: null, steps: null,
         notification: 'You moved ' + state.steps + ' spaces.',
       }, spaces[position]);
     }
@@ -347,11 +364,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return applyEnemyTurn(state, state.enemy, 0, ['You pass without scoring a hand.']);
     case 'CHOOSE_REWARD': {
       if (state.scene !== 'reward' || !state.rewards.some((r) => r.id === action.id)) return state;
-      return { ...grantReward(state, action.id), scene: 'board', rewards: [],
+      return { ...grantReward(state, action.id), scene: 'board', rewards: [], rewardSource: null,
         notification: REWARDS.find((r) => r.id === action.id)!.title + ' acquired.' };
     }
     case 'SKIP_REWARD':
-      return state.scene === 'reward' ? { ...state, scene: 'board', rewards: [], notification: 'Reward skipped.' } : state;
+      return state.scene === 'reward' ? { ...state, scene: 'board', rewards: [], rewardSource: null,
+        notification: 'Reward skipped.' } : state;
     case 'SHOP_BUY': {
       const reward = REWARDS.find((r) => r.id === action.id);
       if (state.scene !== 'shop' || !reward || state.shopBought.includes(reward.id) ||
