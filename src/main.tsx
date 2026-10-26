@@ -1,8 +1,9 @@
-import React, { useReducer } from 'react';
+import React, { useEffect, useReducer, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  canPlay, enemyIntent, gameReducer, newGame, rankLabel, REWARDS,
-  scoreHand, scorePowers, SUIT_SYMBOL,
+  BOARD_SIZE, FLOOR_SPACES, MIN_DECK_SIZE, canPlay, cardRemovalCost,
+  enemyIntent, gameReducer, newGame, rankLabel, REWARDS,
+  scoreHand, scorePowers, SUIT_SYMBOL, tileIndex,
   type Card, type GameAction, type GameState, type Reward, type Room, type Suit,
 } from './game';
 import './styles.css';
@@ -11,18 +12,14 @@ const ROOM_INFO: Record<Room, { icon: string; name: string; description: string 
   entry: { icon: '⌂', name: 'Landing', description: 'A quiet turn in the staircase' },
   battle: { icon: '⚔', name: 'Battle', description: 'A foe patrols this landing' },
   elite: { icon: '♜', name: 'Elite', description: 'A formidable defender' },
-  shop: { icon: '¤', name: 'Merchant', description: 'Spend gold on a relic or cards' },
+  shop: { icon: '¤', name: 'Merchant', description: 'Buy relics or remove a card' },
   rest: { icon: '✚', name: 'Sanctuary', description: 'Recover 14 HP' },
   cache: { icon: '◆', name: 'Coffer', description: 'Choose a relic' },
   fortune: { icon: '✦', name: 'Fortune', description: 'Gain 2 Luck' },
   forge: { icon: '⚒', name: 'Forge', description: 'Gain +1 Club block power' },
 };
-const GRID: (number | null)[] = [
-  9, 8, 7, 6,
-  10, null, null, 5,
-  11, null, null, 4,
-  0, 1, 2, 3,
-];
+const GRID: (number | null)[] = Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, i) =>
+  tileIndex(Math.floor(i / BOARD_SIZE), i % BOARD_SIZE));
 const SUIT_INFO: { suit: Suit; name: string; effect: string }[] = [
   { suit: 'spades', name: 'Spades', effect: 'Damage' },
   { suit: 'clubs', name: 'Clubs', effect: 'Block' },
@@ -71,40 +68,51 @@ function Title({ eyebrow, title, subtitle }: { eyebrow: string; title: string; s
   </div>;
 }
 function Board({ state, dispatch }: { state: GameState; dispatch: React.Dispatch<GameAction> }) {
-  const landing = state.steps === null ? null : (state.position + state.steps) % 12;
-  const crossing = state.steps !== null && state.position + state.steps >= 12;
-  const visibleLanding = crossing ? null : landing;
-  const towerBoss = state.steps !== null && state.floor === 3 && state.position + state.steps >= 12;
+  const landing = state.steps === null ? null : (state.position + state.steps) % FLOOR_SPACES;
+  const crossing = state.steps !== null && state.position + state.steps >= FLOOR_SPACES;
+  const towerBoss = crossing && state.floor === 3;
+  const [view, setView] = useState<'current' | 'next'>('current');
+  useEffect(() => { setView(crossing && state.floor < 3 ? 'next' : 'current'); }, [crossing, state.floor, state.steps]);
+  const viewingNext = view === 'next' && state.floor < 3;
+  const viewedFloor = state.floor + (viewingNext ? 1 : 0);
+  const displayedSpaces = viewingNext ? state.nextSpaces : state.spaces;
+  const visibleLanding = landing !== null && viewingNext === crossing && !towerBoss ? landing : null;
   return <section className="board-screen screen">
     <Title eyebrow={'THE ASCENT · FLOOR ' + state.floor} title="The Spiral Stair"
-      subtitle="One circuit, one floor higher. Roll the die, choose where to land, and survive the tower." />
+      subtitle="A 10×10 tower perimeter with 36 landings per floor. Peek ahead before stepping into the next floor." />
     <div className="layout board-layout">
       <div className="panel board-panel">
-        <div className="panel-topline"><span>THE TWELVE LANDINGS</span><span>↗ CLOCKWISE</span></div>
-        <div className="tower-board" aria-label="Square tower map">
+        <div className="panel-topline"><span>{FLOOR_SPACES} LANDINGS · 10×10</span><span>↗ CLOCKWISE</span></div>
+        <div className="floor-switch" role="group" aria-label="Choose which floor to preview">
+          <button type="button" className={!viewingNext ? 'is-active' : ''}
+            aria-pressed={!viewingNext} onClick={() => setView('current')}>FLOOR {state.floor} · CURRENT</button>
+          {state.floor < 3 && <button type="button" className={viewingNext ? 'is-active' : ''}
+            aria-pressed={viewingNext} onClick={() => setView('next')}>FLOOR {state.floor + 1} · AHEAD ↗</button>}
+        </div>
+        <div className="tower-board" aria-label={'Square tower map of floor ' + viewedFloor}>
           <div className="tower-core">
             <span className="tower-core-symbol">♜</span>
             <span>FLOOR</span>
-            <strong>{state.floor}</strong>
-            <small>OF THREE</small>
+            <strong>{viewedFloor}</strong>
+            <small>{viewingNext ? 'COMING UP' : 'OF THREE'}</small>
           </div>
           {GRID.map((index, i) => index === null
             ? <div className="board-void" key={'v' + i} />
-            : <div key={index} className={
-                'tower-tile tile-' + state.spaces[index] +
-                (index === state.position ? ' tile-current' : '') +
+            : <div key={index} title={'Space ' + (index + 1) + ': ' + ROOM_INFO[displayedSpaces[index]].name} className={
+                'tower-tile tile-' + displayedSpaces[index] +
+                (!viewingNext && index === state.position ? ' tile-current' : '') +
                 (visibleLanding === index ? ' tile-landing' : '')
               }>
                 <span className="tile-number">{String(index + 1).padStart(2, '0')}</span>
-                <span className="tile-icon" aria-hidden="true">{index === state.position ? '♟' : ROOM_INFO[state.spaces[index]].icon}</span>
-                <span className="tile-name">{index === state.position ? 'YOU' : ROOM_INFO[state.spaces[index]].name}</span>
+                <span className="tile-icon" aria-hidden="true">{!viewingNext && index === state.position ? '♟' : ROOM_INFO[displayedSpaces[index]].icon}</span>
+                <span className="tile-name">{!viewingNext && index === state.position ? 'YOU' : ROOM_INFO[displayedSpaces[index]].name}</span>
               </div>,
           )}
         </div>
         <div className="legend">
           <span><i className="dot current" />Your location</span>
           <span><i className="dot destination" />Next landing</span>
-          <span>Wrap around to climb</span>
+          <span>{viewingNext ? 'Previewing the next floor' : 'Complete the perimeter to climb'}</span>
         </div>
       </div>
       <div className="board-sidebar">
@@ -136,7 +144,7 @@ function Board({ state, dispatch }: { state: GameState; dispatch: React.Dispatch
           <div className="panel-topline"><span>THE TOWER'S WHISPER</span></div>
           <p>{state.notification}</p>
           <div className="floor-track"><span>ASCENT PROGRESS</span><strong>{state.floor} / 3</strong></div>
-          <Meter value={state.floor - 1 + state.position / 12} max={3} />
+          <Meter value={state.floor - 1 + state.position / FLOOR_SPACES} max={3} />
         </div>
         <div className="panel guide-panel">
           <div className="panel-topline"><span>THE FOUR SUITS</span></div>
@@ -265,9 +273,13 @@ function RewardScreen({ state, dispatch }: { state: GameState; dispatch: React.D
   </section>;
 }
 function Shop({ state, dispatch }: { state: GameState; dispatch: React.Dispatch<GameAction> }) {
+  const [cardToRemove, setCardToRemove] = useState<string | null>(null);
+  const removalCost = cardRemovalCost(state.cardsRemoved);
+  const canRemove = !state.shopRemoved && state.gold >= removalCost && state.deck.length > MIN_DECK_SIZE;
+  const picked = state.deck.find((card) => card.id === cardToRemove);
   return <section className="screen small-screen">
     <Title eyebrow="AN UNLIKELY MERCHANT" title="The Gilded Table"
-      subtitle="Some bargains reshape your entire run. Purchase as many as you can afford, or continue climbing." />
+      subtitle="Buy upgrades, or pay to permanently remove one card from your deck at this shop." />
     <div className="merchant-banner"><span>◆ YOUR PURSE</span><strong>{state.gold} GOLD</strong></div>
     <div className="reward-grid shop-grid">
       {REWARDS.map((reward) => {
@@ -278,6 +290,33 @@ function Shop({ state, dispatch }: { state: GameState; dispatch: React.Dispatch<
           disabled={purchased || cannotStack || state.gold < reward.cost}
           onClick={() => dispatch({ type: 'SHOP_BUY', id: reward.id })} />;
       })}
+    </div>
+    <div className="panel shop-removal-panel">
+      <div className="panel-topline"><span>✂ CARD REMOVAL</span><span>◆ {removalCost} GOLD · ONCE PER SHOP</span></div>
+      <h2>Thin Your Deck</h2>
+      <p>Choose an unwanted card to permanently remove. The next removal costs 10 more gold, even at another shop.</p>
+      {state.shopRemoved ? <div className="removal-message">✓ A card was removed at this shop. Come back another time.</div>
+        : state.deck.length <= MIN_DECK_SIZE ? <div className="removal-message">Your deck needs at least {MIN_DECK_SIZE} cards.</div>
+        : <>
+          <div className="removal-grid" role="group" aria-label="Select a card to remove">
+            {state.deck.map((card) => <button key={card.id} type="button"
+              aria-pressed={cardToRemove === card.id}
+              aria-label={'Select ' + rankLabel(card.rank) + ' of ' + card.suit + ' for removal'}
+              className={'removal-item ' + card.suit + (cardToRemove === card.id ? ' chosen' : '')}
+              disabled={state.gold < removalCost}
+              onClick={() => setCardToRemove(card.id)}>
+                <span>{rankLabel(card.rank)}{SUIT_SYMBOL[card.suit]}</span>
+              </button>)}
+          </div>
+          <div className="removal-controls">
+            <span>{picked ? rankLabel(picked.rank) + ' of ' + picked.suit + ' selected' : 'Select one card above.'}</span>
+            <button className="primary-button" disabled={!canRemove || !picked}
+              onClick={() => { if (picked) { dispatch({ type: 'SHOP_REMOVE_CARD', cardId: picked.id }); setCardToRemove(null); } }}>
+              REMOVE CARD · ◆ {removalCost}
+            </button>
+          </div>
+          {state.gold < removalCost && <p className="fine-print">You need {removalCost - state.gold} more gold to remove a card.</p>}
+        </>}
     </div>
     <button className="primary-button skip-button" onClick={() => dispatch({ type: 'LEAVE_SHOP' })}>RETURN TO THE TOWER ↗</button>
   </section>;
