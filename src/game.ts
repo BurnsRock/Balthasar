@@ -3,6 +3,24 @@
  * All poker evaluation and deck cycling live outside React for testing.
  */
 export type Suit = 'spades' | 'clubs' | 'hearts' | 'diamonds';
+export const BOARD_SIZE = 10;
+// A square staircase traverses its perimeter; the 8×8 center is the tower shaft.
+export const FLOOR_SPACES = 4 * (BOARD_SIZE - 1);
+export const CARD_REMOVAL_BASE_COST = 15;
+export const CARD_REMOVAL_COST_INCREASE = 10;
+export const MIN_DECK_SIZE = 8;
+export function cardRemovalCost(removals: number): number {
+  return CARD_REMOVAL_BASE_COST + removals * CARD_REMOVAL_COST_INCREASE;
+}
+/** Clockwise indices starting at the bottom-left corner of the square. */
+export function tileIndex(row: number, col: number): number | null {
+  if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return null;
+  if (row === BOARD_SIZE - 1) return col;
+  if (col === BOARD_SIZE - 1) return (BOARD_SIZE - 1) + (BOARD_SIZE - 1 - row);
+  if (row === 0) return 2 * (BOARD_SIZE - 1) + (BOARD_SIZE - 1 - col);
+  if (col === 0) return 3 * (BOARD_SIZE - 1) + row;
+  return null;
+}
 export type Room = 'entry' | 'battle' | 'elite' | 'shop' | 'rest' | 'cache' | 'fortune' | 'forge';
 export type Scene = 'board' | 'combat' | 'reward' | 'shop' | 'gameover' | 'victory';
 export type EnemyKind = 'scout' | 'warden' | 'leech' | 'boss';
@@ -43,6 +61,8 @@ export interface GameState {
   fightsWon: number;
   rewards: Reward[];
   shopBought: RewardId[];
+  shopRemoved: boolean;
+  cardsRemoved: number;
   rolled: number | null;
   steps: number | null;
   log: string[];
@@ -60,6 +80,7 @@ export type GameAction =
   | { type: 'CHOOSE_REWARD'; id: RewardId }
   | { type: 'SKIP_REWARD' }
   | { type: 'SHOP_BUY'; id: RewardId }
+  | { type: 'SHOP_REMOVE_CARD'; cardId: string }
   | { type: 'LEAVE_SHOP' };
 
 export const SUITS: Suit[] = ['spades', 'clubs', 'hearts', 'diamonds'];
@@ -161,7 +182,11 @@ export const REWARDS: Reward[] = [
   { id: 'royals', title: 'Royal Pair', description: 'Add a Q♠ and Q♥ to your deck.', cost: 28 },
 ];
 
-const ROOMS: Room[] = ['battle', 'battle', 'shop', 'battle', 'elite', 'rest', 'battle', 'fortune', 'cache', 'forge', 'battle'];
+const ROOM_COUNTS: Array<[Room, number]> = [
+  ['battle', 17], ['elite', 3], ['shop', 3], ['rest', 3],
+  ['cache', 3], ['fortune', 3], ['forge', 3],
+];
+const ROOMS: Room[] = ROOM_COUNTS.flatMap(([room, count]) => Array<Room>(count).fill(room));
 export function generateFloor(): Room[] { return ['entry', ...shuffle(ROOMS)]; }
 function blankPerks(): Perks {
   return { spades: 0, clubs: 0, hearts: 0, diamonds: 0, handSize: 8, shortHanded: false };
@@ -173,7 +198,8 @@ export function newGame(): GameState {
     hp: 68, maxHp: 68, gold: 12, luck: 2,
     deck: startingDeck(), drawPile: [], discardPile: [], hand: [], selected: [],
     perks: blankPerks(), enemy: null, turn: 0, fightsWon: 0,
-    rewards: [], shopBought: [], rolled: null, steps: null, log: [],
+    rewards: [], shopBought: [], shopRemoved: false, cardsRemoved: 0,
+    rolled: null, steps: null, log: [],
     notification: 'The tower awaits. Roll to ascend.', cardCounter: 0,
   };
 }
@@ -255,7 +281,8 @@ function resolveRoom(state: GameState, room: Room): GameState {
   switch (room) {
     case 'battle': return beginBattle(state, (['scout', 'warden', 'leech'] as EnemyKind[])[Math.floor(Math.random() * 3)]);
     case 'elite': return beginBattle(state, 'warden', true);
-    case 'shop': return { ...state, scene: 'shop', shopBought: [], notification: 'A merchant offers unusual bargains.' };
+    case 'shop': return { ...state, scene: 'shop', shopBought: [], shopRemoved: false,
+      notification: 'A merchant offers unusual bargains and a card-removal service.' };
     case 'rest': return { ...state, hp: Math.min(state.maxHp, state.hp + 14), notification: 'You rest and recover 14 HP.' };
     case 'cache': return { ...state, scene: 'reward', rewardSource: 'coffer',
       rewards: rewardsForCoffer(state), notification: 'The Coffer holds a choice of relics. Select one.' };
@@ -344,12 +371,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'LAND': {
       if (state.scene !== 'board' || state.steps === null) return state;
       const sum = state.position + state.steps;
-      const wrapped = sum >= 12;
+      const wrapped = sum >= FLOOR_SPACES;
       if (wrapped && state.floor === 3) {
         return beginBattle({ ...state, rolled: null, steps: null }, 'boss');
       }
       const floor = state.floor + (wrapped ? 1 : 0);
-      const position = sum % 12;
+      const position = sum % FLOOR_SPACES;
       const spaces = wrapped ? state.nextSpaces : state.spaces;
       const nextSpaces = wrapped ? generateFloor() : state.nextSpaces;
       return resolveRoom({
@@ -377,6 +404,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         (reward.id === 'hand' && state.perks.handSize >= 11)) return state;
       return { ...grantReward(state, action.id), gold: state.gold - reward.cost,
         shopBought: [...state.shopBought, action.id], notification: reward.title + ' purchased.' };
+    }
+    case 'SHOP_REMOVE_CARD': {
+      if (state.scene !== 'shop' || state.shopRemoved || state.deck.length <= MIN_DECK_SIZE ||
+        state.gold < cardRemovalCost(state.cardsRemoved)) return state;
+      const card = state.deck.find((candidate) => candidate.id === action.cardId);
+      if (!card) return state;
+      return { ...state, deck: state.deck.filter((candidate) => candidate.id !== card.id),
+        gold: state.gold - cardRemovalCost(state.cardsRemoved),
+        cardsRemoved: state.cardsRemoved + 1, shopRemoved: true,
+        notification: 'Permanently removed ' + rankLabel(card.rank) + SUIT_SYMBOL[card.suit] + ' from your deck.' };
     }
     case 'LEAVE_SHOP':
       return state.scene === 'shop' ? { ...state, scene: 'board', notification: 'Back to the staircase.' } : state;
