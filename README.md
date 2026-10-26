@@ -33,8 +33,9 @@ npm run build
 - All played cards enter the discard pile. Reshuffle the discard pile when the draw pile runs out.
 - **Retain** unplayed cards; draw back to the hand limit on the next turn.
 - Enemy actions are telegraphed, then resolve after your one hand play.
-- Roll a D6 to move on a **12-space square staircase**. Spend Luck to alter the result.
-- Fight enemies, rest, shop, acquire upgrades, and ascend three floors to face the Tower Keeper.
+- Roll a D6 to move on a **12-space square staircase**. Spend Luck to alter the result. The next floor is pre-generated so the predicted landing stays accurate.
+- Fight enemies, rest, shop, open Coffers for a **free relic choice**, acquire upgrades, and ascend three floors to face the Tower Keeper.
+- Duplicate and edited cards make **Five of a Kind**, **Flush House**, and **Flush Five** possible. These score all five cards, and Flush Five ranks highest.
 
 The starter deck is 32 cards (ranks 2–9 across four suits). This and most numbers are prototype balance defaults, not final design.
 
